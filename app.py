@@ -1,7 +1,10 @@
-from flask import Flask, render_template
-from database.db import get_db, init_db, seed_db
+import os
+
+from flask import Flask, render_template, request, redirect, url_for, session, flash
+from database.db import get_db, init_db, seed_db, create_user, get_user_by_email
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key-change-in-production")
 
 with app.app_context():
     init_db()
@@ -17,9 +20,39 @@ def landing():
     return render_template("landing.html")
 
 
-@app.route("/register")
+@app.route("/register", methods=["GET", "POST"])
 def register():
-    return render_template("register.html")
+    if request.method == "GET":
+        return render_template("register.html", error=None, name="", email="")
+
+    name = request.form.get("name", "").strip()
+    email = request.form.get("email", "").strip()
+    password = request.form.get("password", "")
+
+    error = None
+    if not name:
+        error = "Name is required."
+    elif not email or "@" not in email:
+        error = "A valid email is required."
+    elif len(password) < 8:
+        error = "Password must be at least 8 characters."
+
+    if error:
+        return render_template("register.html", error=error, name=name, email=email)
+
+    if get_user_by_email(email):
+        return render_template(
+            "register.html",
+            error="An account with that email already exists.",
+            name=name,
+            email=email,
+        )
+
+    new_user = create_user(name, email, password)
+    session["user_id"] = new_user["id"]
+    session["user_name"] = new_user["name"]
+    flash("Welcome to Spendly!", "success")
+    return redirect(url_for("landing"))
 
 
 @app.route("/login")
